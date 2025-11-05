@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import YandexMap from '@/components/YandexMap';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('main');
@@ -46,26 +48,169 @@ const Index = () => {
     }
   };
 
-  const [marks] = useState([
-    { id: 1, type: 'tick', lat: 55.7558, lng: 37.6173, date: '2025-11-04', verified: true },
-    { id: 2, type: 'hogweed', lat: 55.7522, lng: 37.6156, date: '2025-11-03', verified: false },
-    { id: 3, type: 'tick', lat: 55.7480, lng: 37.6350, date: '2025-11-02', verified: true },
-  ]);
+  const [marks, setMarks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newMark, setNewMark] = useState({ type: 'tick', lat: 0, lng: 0, description: '' });
+  const [addMarkOpen, setAddMarkOpen] = useState(false);
 
-  const [plannedZones] = useState([
-    { id: 1, type: 'tick', area: 'Сокольники', date: '2025-11-15', color: '#78350f' },
-    { id: 2, type: 'hogweed', area: 'Измайлово', date: '2025-11-18', color: '#15803d' },
-  ]);
+  const [plannedZones, setPlannedZones] = useState<any[]>([]);
 
-  const [currentZones] = useState([
-    { id: 1, type: 'tick', area: 'Битцевский парк', startDate: '2025-11-05', endDate: '2025-11-10' },
-    { id: 2, type: 'hogweed', area: 'Кузьминки', startDate: '2025-11-04', endDate: '2025-11-08' },
-  ]);
+  const [currentZones, setCurrentZones] = useState<any[]>([]);
 
-  const [news] = useState([
-    { id: 1, title: 'Начало сезона обработки территорий', date: '2025-11-01', content: 'Стартовала программа мониторинга...' },
-    { id: 2, title: 'Новые зоны риска выявлены', date: '2025-10-28', content: 'По результатам анализа...' },
-  ]);
+  const [news, setNews] = useState<any[]>([]);
+  const [newNewsItem, setNewNewsItem] = useState({ title: '', content: '' });
+
+  const API_MARKS = 'https://functions.poehali.dev/803d119d-b001-4c47-87cf-2e1142712896';
+  const API_TREATMENTS = 'https://functions.poehali.dev/3b5b6f93-220b-4cf2-aad8-4783067093ff';
+  const API_NEWS = 'https://functions.poehali.dev/13cce3cc-4cd3-4b16-b6db-185381c2a465';
+
+  useEffect(() => {
+    loadMarks();
+    loadPlannedTreatments();
+    loadCurrentTreatments();
+    loadNews();
+  }, []);
+
+  const loadMarks = async () => {
+    try {
+      const response = await fetch(API_MARKS);
+      const data = await response.json();
+      setMarks(data.marks || []);
+    } catch (error) {
+      console.error('Ошибка загрузки меток:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPlannedTreatments = async () => {
+    try {
+      const response = await fetch(`${API_TREATMENTS}?type=planned`);
+      const data = await response.json();
+      setPlannedZones(data.treatments || []);
+    } catch (error) {
+      console.error('Ошибка загрузки запланированных обработок:', error);
+    }
+  };
+
+  const loadCurrentTreatments = async () => {
+    try {
+      const response = await fetch(`${API_TREATMENTS}?type=current`);
+      const data = await response.json();
+      setCurrentZones(data.treatments || []);
+    } catch (error) {
+      console.error('Ошибка загрузки текущих обработок:', error);
+    }
+  };
+
+  const loadNews = async () => {
+    try {
+      const response = await fetch(API_NEWS);
+      const data = await response.json();
+      setNews(data.news || []);
+    } catch (error) {
+      console.error('Ошибка загрузки новостей:', error);
+    }
+  };
+
+  const handleAddMark = async () => {
+    if (newMark.lat === 0 || newMark.lng === 0) {
+      toast.error('Укажите координаты на карте');
+      return;
+    }
+
+    try {
+      const response = await fetch(API_MARKS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: newMark.type,
+          latitude: newMark.lat,
+          longitude: newMark.lng,
+          description: newMark.description
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        toast.success('Метка добавлена на проверку');
+        setAddMarkOpen(false);
+        setNewMark({ type: 'tick', lat: 0, lng: 0, description: '' });
+        loadMarks();
+      } else {
+        toast.error(data.error || 'Ошибка добавления метки');
+      }
+    } catch (error) {
+      toast.error('Ошибка сети');
+    }
+  };
+
+  const handleVerifyMark = async (markId: number, verified: boolean) => {
+    try {
+      const response = await fetch(API_MARKS, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': credentials.login
+        },
+        body: JSON.stringify({ id: markId, verified })
+      });
+
+      if (response.ok) {
+        toast.success(verified ? 'Метка подтверждена' : 'Метка отклонена');
+        loadMarks();
+      }
+    } catch (error) {
+      toast.error('Ошибка обновления метки');
+    }
+  };
+
+  const handleAddNews = async () => {
+    if (!newNewsItem.title || !newNewsItem.content) {
+      toast.error('Заполните все поля');
+      return;
+    }
+
+    try {
+      const response = await fetch(API_NEWS, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': credentials.login
+        },
+        body: JSON.stringify(newNewsItem)
+      });
+
+      if (response.ok) {
+        toast.success('Новость опубликована');
+        setNewNewsItem({ title: '', content: '' });
+        loadNews();
+      }
+    } catch (error) {
+      toast.error('Ошибка публикации новости');
+    }
+  };
+
+  const handleDeleteNews = async (newsId: number) => {
+    try {
+      const response = await fetch(`${API_NEWS}?id=${newsId}`, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Token': credentials.login }
+      });
+
+      if (response.ok) {
+        toast.success('Новость удалена');
+        loadNews();
+      }
+    } catch (error) {
+      toast.error('Ошибка удаления новости');
+    }
+  };
+
+  const handleMapClick = (coords: [number, number]) => {
+    setNewMark({ ...newMark, lat: coords[0], lng: coords[1] });
+    toast.info(`Координаты: ${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`);
+  };
 
   const stats = {
     totalMarks: marks.length,
@@ -225,25 +370,11 @@ const Index = () => {
           {activeTab === 'main' && (
             <div className="space-y-6">
               <Card className="p-6">
-                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-green-50" />
-                  <div className="relative z-10 text-center">
-                    <Icon name="Map" size={48} className="mx-auto mb-4 text-primary" />
-                    <p className="text-lg font-medium text-gray-700">Яндекс.Карты</p>
-                    <p className="text-sm text-gray-500">Интеграция карт будет добавлена</p>
-                  </div>
-                  {marks.map((mark) => (
-                    <div
-                      key={mark.id}
-                      className="absolute w-6 h-6 rounded-full border-2 border-white shadow-lg cursor-pointer hover:scale-110 transition-transform"
-                      style={{
-                        backgroundColor: mark.type === 'tick' ? '#78350f' : '#15803d',
-                        left: `${(mark.lng - 37.6) * 1000 + 50}%`,
-                        top: `${(55.76 - mark.lat) * 1000 + 50}%`,
-                      }}
-                    />
-                  ))}
-                </div>
+                <YandexMap
+                  marks={marks}
+                  showUserLocation={true}
+                  onMapClick={handleMapClick}
+                />
               </Card>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -282,28 +413,71 @@ const Index = () => {
                     <Icon name="Plus" size={18} />
                     Добавить метку
                   </h3>
-                  <div className="space-y-3">
-                    <div>
-                      <Label>Тип метки</Label>
-                      <Select>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Выберите тип" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="tick">Укус клеща</SelectItem>
-                          <SelectItem value="hogweed">Борщевик</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Координаты</Label>
-                      <Button variant="outline" className="w-full gap-2">
-                        <Icon name="MapPin" size={16} />
-                        Определить местоположение
+                  <Dialog open={addMarkOpen} onOpenChange={setAddMarkOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="w-full gap-2">
+                        <Icon name="Plus" size={16} />
+                        Создать метку
                       </Button>
-                    </div>
-                    <Button className="w-full">Добавить метку</Button>
-                  </div>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Добавить метку</DialogTitle>
+                        <DialogDescription>
+                          Кликните на карте или введите координаты
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Тип метки</Label>
+                          <Select value={newMark.type} onValueChange={(value) => setNewMark({ ...newMark, type: value })}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="tick">Укус клеща</SelectItem>
+                              <SelectItem value="hogweed">Борщевик</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Описание</Label>
+                          <Textarea
+                            value={newMark.description}
+                            onChange={(e) => setNewMark({ ...newMark, description: e.target.value })}
+                            placeholder="Опишите ситуацию"
+                            rows={3}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label>Широта</Label>
+                            <Input
+                              type="number"
+                              step="0.0001"
+                              value={newMark.lat || ''}
+                              onChange={(e) => setNewMark({ ...newMark, lat: parseFloat(e.target.value) || 0 })}
+                            />
+                          </div>
+                          <div>
+                            <Label>Долгота</Label>
+                            <Input
+                              type="number"
+                              step="0.0001"
+                              value={newMark.lng || ''}
+                              onChange={(e) => setNewMark({ ...newMark, lng: parseFloat(e.target.value) || 0 })}
+                            />
+                          </div>
+                        </div>
+                        <Button onClick={handleAddMark} className="w-full">
+                          Добавить метку
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  <p className="text-xs text-gray-500 mt-3">
+                    Кликните на карте чтобы указать координаты
+                  </p>
                 </Card>
               </div>
             </div>
@@ -313,24 +487,7 @@ const Index = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2 p-6">
-                  <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-50 to-yellow-50" />
-                    <div className="relative z-10 text-center">
-                      <Icon name="Calendar" size={48} className="mx-auto mb-4 text-primary" />
-                      <p className="text-lg font-medium text-gray-700">Запланированные зоны</p>
-                    </div>
-                    {plannedZones.map((zone) => (
-                      <div
-                        key={zone.id}
-                        className="absolute w-20 h-20 rounded-full opacity-40 border-2 border-white"
-                        style={{
-                          backgroundColor: zone.color,
-                          left: `${Math.random() * 70 + 15}%`,
-                          top: `${Math.random() * 70 + 15}%`,
-                        }}
-                      />
-                    ))}
-                  </div>
+                  <YandexMap zones={plannedZones} />
                 </Card>
 
                 <Card className="p-6">
@@ -385,24 +542,7 @@ const Index = () => {
           {activeTab === 'current' && (
             <div className="space-y-6">
               <Card className="p-6">
-                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-blue-50" />
-                  <div className="relative z-10 text-center">
-                    <Icon name="Activity" size={48} className="mx-auto mb-4 text-primary" />
-                    <p className="text-lg font-medium text-gray-700">Текущие зоны обработки</p>
-                  </div>
-                  {currentZones.map((zone) => (
-                    <div
-                      key={zone.id}
-                      className="absolute w-24 h-24 rounded-full opacity-30 border-4 border-white animate-pulse"
-                      style={{
-                        backgroundColor: zone.type === 'tick' ? '#78350f' : '#15803d',
-                        left: `${Math.random() * 70 + 15}%`,
-                        top: `${Math.random() * 70 + 15}%`,
-                      }}
-                    />
-                  ))}
-                </div>
+                <YandexMap zones={currentZones} />
               </Card>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -450,13 +590,22 @@ const Index = () => {
                   <div className="space-y-4">
                     <div>
                       <Label>Заголовок</Label>
-                      <Input placeholder="Введите заголовок новости" />
+                      <Input
+                        value={newNewsItem.title}
+                        onChange={(e) => setNewNewsItem({ ...newNewsItem, title: e.target.value })}
+                        placeholder="Введите заголовок новости"
+                      />
                     </div>
                     <div>
                       <Label>Содержание</Label>
-                      <Textarea placeholder="Введите текст новости" rows={5} />
+                      <Textarea
+                        value={newNewsItem.content}
+                        onChange={(e) => setNewNewsItem({ ...newNewsItem, content: e.target.value })}
+                        placeholder="Введите текст новости"
+                        rows={5}
+                      />
                     </div>
-                    <Button className="gap-2">
+                    <Button onClick={handleAddNews} className="gap-2">
                       <Icon name="Send" size={16} />
                       Опубликовать
                     </Button>
@@ -474,10 +623,7 @@ const Index = () => {
                     <p className="text-gray-600">{item.content}</p>
                     {isAdmin && (
                       <div className="flex gap-2 mt-4">
-                        <Button variant="outline" size="sm">
-                          <Icon name="Edit" size={14} />
-                        </Button>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleDeleteNews(item.id)}>
                           <Icon name="Trash2" size={14} />
                         </Button>
                       </div>
@@ -591,10 +737,10 @@ const Index = () => {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <Button size="sm" variant="default">
+                          <Button size="sm" variant="default" onClick={() => handleVerifyMark(mark.id, true)}>
                             <Icon name="Check" size={14} />
                           </Button>
-                          <Button size="sm" variant="outline">
+                          <Button size="sm" variant="outline" onClick={() => handleVerifyMark(mark.id, false)}>
                             <Icon name="X" size={14} />
                           </Button>
                         </div>
