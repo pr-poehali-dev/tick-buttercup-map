@@ -1,8 +1,38 @@
 import json
 import os
 import psycopg2
+import requests
 from datetime import datetime, timedelta
 from typing import Dict, Any
+
+def send_telegram_notification(mark_type: str, latitude: float, longitude: float, description: str):
+    try:
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+        
+        if not bot_token or not chat_id:
+            return
+        
+        type_emoji = '🦂' if mark_type == 'tick' else '🌿'
+        type_text = 'Клещ' if mark_type == 'tick' else 'Борщевик'
+        
+        message = f"""
+🔔 Новая метка!
+
+{type_emoji} Тип: {type_text}
+📍 Координаты: {latitude:.4f}, {longitude:.4f}
+📝 Описание: {description or 'не указано'}
+
+✅ Требуется проверка администратором
+        """
+        
+        requests.post(
+            f'https://api.telegram.org/bot{bot_token}/sendMessage',
+            json={'chat_id': chat_id, 'text': message},
+            timeout=5
+        )
+    except Exception as e:
+        print(f'Ошибка отправки уведомления: {e}')
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     '''
@@ -131,6 +161,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             mark_id = cursor.fetchone()[0]
             conn.commit()
+            
+            send_telegram_notification(mark_type, latitude, longitude, description)
             
             return {
                 'statusCode': 201,

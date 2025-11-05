@@ -63,6 +63,7 @@ const Index = () => {
   const API_MARKS = 'https://functions.poehali.dev/803d119d-b001-4c47-87cf-2e1142712896';
   const API_TREATMENTS = 'https://functions.poehali.dev/3b5b6f93-220b-4cf2-aad8-4783067093ff';
   const API_NEWS = 'https://functions.poehali.dev/13cce3cc-4cd3-4b16-b6db-185381c2a465';
+  const API_REPORTS = 'https://functions.poehali.dev/edb6b64a-815c-45dd-93f2-d09e47199c82';
 
   useEffect(() => {
     loadMarks();
@@ -212,6 +213,26 @@ const Index = () => {
     toast.info(`Координаты: ${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`);
   };
 
+  const handleGenerateReport = async () => {
+    try {
+      toast.info('Генерация отчета...');
+      const response = await fetch(API_REPORTS);
+      const data = await response.json();
+      
+      if (response.ok) {
+        if (data.message) {
+          toast.info(data.message);
+        } else {
+          toast.success(`Отчет отправлен! Обработано меток: ${data.marks_count}`);
+        }
+      } else {
+        toast.error('Ошибка генерации отчета');
+      }
+    } catch (error) {
+      toast.error('Ошибка отправки отчета');
+    }
+  };
+
   const stats = {
     totalMarks: marks.length,
     tickMarks: marks.filter(m => m.type === 'tick').length,
@@ -353,7 +374,7 @@ const Index = () => {
                 Система мониторинга клещей и борщевика
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <Badge variant="outline" className="gap-1">
                 <div className="w-2 h-2 bg-[#78350f] rounded-full" />
                 Клещи
@@ -362,6 +383,12 @@ const Index = () => {
                 <div className="w-2 h-2 bg-[#15803d] rounded-full" />
                 Борщевик
               </Badge>
+              {isAdmin && (
+                <Button variant="outline" size="sm" onClick={handleGenerateReport} className="gap-2">
+                  <Icon name="FileText" size={16} />
+                  Отчет
+                </Button>
+              )}
             </div>
           </div>
         </header>

@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "Generate daily report",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "success": "boolean"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
